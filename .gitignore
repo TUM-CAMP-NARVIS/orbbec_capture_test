@@ -1,0 +1,8 @@
+/cmake-build-debug/
+/cmake-build-release/
+/build/
+/.idea/orbbec_capture_test.iml
+/.idea/vcs.xml
+/.idea/modules.xml
+/.idea/misc.xml
+/CMakeUserPresets.json
