@@ -15,8 +15,10 @@ class TestOrbbecCaptureRecipe(ConanFile):
         self.requires("h264nal/0.15@camposs/stable", transitive_libs=True)
         self.requires("spdlog/1.11.0", transitive_libs=True)
         self.requires("fmt/9.1.0", force=True, transitive_libs=True)
+        self.requires("ffmpeg/6.1@camposs/stable", transitive_libs=True)
         self.requires("pcpd_codec_nvenc/0.4.0@artekmed/stable", transitive_libs=True)
         self.requires("opencv/4.8.0@camposs/stable", transitive_libs=True)
         self.requires("nvidia-video-codec-sdk/12.1.14@vendor/stable", transitive_libs=True)
         self.requires("optick/1.4.0.0@camposs/stable", transitive_libs=True)
+        self.requires("openssl/1.1.1t", transitive_libs=True)
 
