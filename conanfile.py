@@ -18,7 +18,7 @@ class TestOrbbecCaptureRecipe(ConanFile):
         self.requires("orbbec-sdk/1.8@vendor/stable", transitive_libs=True)
         self.requires("spdlog/1.11.0", transitive_libs=True)
         self.requires("ffmpeg/6.1@camposs/stable", transitive_libs=True)
-        self.requires("opencv/4.8.0@camposs/stable", transitive_libs=True)
+        self.requires("opencv/4.9.0@camposs/stable", transitive_libs=True)
         self.requires("fmt/9.1.0", force=True)
         self.requires("libwebp/1.3.2", force=True)
 
