@@ -32,6 +32,7 @@ struct FrameInfo{
 };
 tcn::buffered_channel<FrameInfo> frame_queue{2};
 tcn::buffered_channel<std::shared_ptr<ob::FrameSet>> frame_set_queue{8};
+tcn::buffered_channel<cv::Mat> image_queue{8};
 
 std::atomic<bool> should_stop{false};
 
@@ -114,10 +115,7 @@ int main(int argc, char **argv) try {
 
 
     auto display_cb = [&](cv::Mat image) {
-        std::scoped_lock<std::mutex> lk(displayMutex);
-        //spdlog::info("got display frame idx; {0} decoder idx: {1}", info.frame_idx, info.dec_frame_idx);
-        cv::imshow("color", image);
-        cv::waitKey(2);
+        auto ret = image_queue.push(image);
     };
 
     auto decoder_task = std::async([&]() {
@@ -232,7 +230,16 @@ int main(int argc, char **argv) try {
 
 
     while (frame_durations.size() < 500) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(40));
+        cv::Mat image;
+        auto ret = image_queue.pop_wait_for(image, std::chrono::milliseconds(5));
+        if (ret == tcn::channel_op_status::timeout) {
+            continue;
+        } else if (ret == tcn::channel_op_status::success) {
+            cv::imshow("color", image);
+            cv::waitKey(2);
+        } else {
+            spdlog::warn("unexpect buffer_channel return status.");
+        }
     }
 
     // stop the pipeline

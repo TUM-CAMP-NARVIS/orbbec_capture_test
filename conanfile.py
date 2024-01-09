@@ -14,6 +14,10 @@ class TestOrbbecCaptureRecipe(ConanFile):
         "ffmpeg/*:with_ssl": False,
     }
 
+    def configure(self):
+        if self.settings.os == "Macos":
+            self.options["opencv"].with_ipp = False
+
     def requirements(self):
         self.requires("orbbec-sdk/1.8@vendor/stable", transitive_libs=True)
         self.requires("spdlog/1.11.0", transitive_libs=True)
