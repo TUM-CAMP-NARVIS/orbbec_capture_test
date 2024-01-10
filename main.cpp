@@ -95,6 +95,13 @@ int main(int argc, char **argv) try {
     av_log_set_callback(avlog_cb);
     av_log_set_level(AV_LOG_INFO);
 
+
+    spdlog::info("Available device types:");
+    AVHWDeviceType type{AV_HWDEVICE_TYPE_NONE};
+    while ((type = av_hwdevice_iterate_types(type)) != AV_HWDEVICE_TYPE_NONE)
+        spdlog::info("HW Device: {0}", av_hwdevice_get_type_name(type));
+
+
     // Create a Context
     ob::Context ctx;
 
@@ -135,7 +142,7 @@ int main(int argc, char **argv) try {
                     if (!decoder) {
 
                         decoder = std::make_unique<tcn::vpf::H26xDecoder>(display_cb);
-                        if (!decoder->DecoderInit(cf->format(), OB_FORMAT_BGRA)) {
+                        if (!decoder->DecoderInit(AV_HWDEVICE_TYPE_CUDA, cf->format(), OB_FORMAT_BGRA)) {
                             spdlog::error("error initializing decoder");
                         }
                         spdlog::info("created decoder: {0}x{1}", cf->width(), cf->height());
@@ -178,7 +185,7 @@ int main(int argc, char **argv) try {
     // Get the color camera configuration list
     auto colorProfileList = pipe->getStreamProfileList(OB_SENSOR_COLOR);
     // use default configuration
-    auto colorProfile = colorProfileList->getVideoStreamProfile(1280, 720, OB_FORMAT_H264, 25);
+    auto colorProfile = colorProfileList->getVideoStreamProfile(2560, 1440, OB_FORMAT_H264, 25);
     // enable depth stream
     config->enableStream(colorProfile);
 

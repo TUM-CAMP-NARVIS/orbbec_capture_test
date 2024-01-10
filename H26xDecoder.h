@@ -15,6 +15,7 @@ extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libswscale/swscale.h>
 #include "libavutil/imgutils.h"
+#include <libavutil/hwcontext.h>
 
 #ifdef __cplusplus
 }
@@ -36,8 +37,10 @@ namespace tcn::vpf {
         const AVCodec *codec{nullptr};
         AVCodecContext *cctx{nullptr};
         AVCodecParserContext *pCodecParserCtx{nullptr};
+        AVBufferRef *hw_device_ctx{nullptr};
         int frame_count{0};
         AVFrame *frame{nullptr};
+        AVFrame *sw_frame{nullptr};
         AVPacket *avpkt{nullptr};
         AVFrame *converted_frame{nullptr};
 
@@ -45,12 +48,14 @@ namespace tcn::vpf {
         bool bIsInit{false};
         int vsize{0};
     public:
-        bool DecoderInit(OBFormat stream_format, OBFormat output_format);
+        bool DecoderInit(AVHWDeviceType device_type, OBFormat stream_format, OBFormat output_format);
 
         bool DecodeOnePacket(int cur_size, uint8_t *cur_ptr);
 
         OBFormat inputFormat{OB_FORMAT_UNKNOWN};
         OBFormat outputFormat{OB_FORMAT_BGR};
+        AVPixelFormat hwOutputFormat{AV_PIX_FMT_NONE};
+        AVPixelFormat decoderOutputFormat{AV_PIX_FMT_NONE};
         AVPixelFormat frameOutputFormat{AV_PIX_FMT_NONE};
 
         frame_handler_cb frameCallback;

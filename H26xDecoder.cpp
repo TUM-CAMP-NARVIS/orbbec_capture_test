@@ -6,10 +6,37 @@
 
 namespace tcn {
     namespace vpf {
-        H26xDecoder::H26xDecoder(frame_handler_cb cb) : frameCallback(std::move(cb)) {}
-        H26xDecoder::~H26xDecoder() = default;
 
-        bool H26xDecoder::DecoderInit(OBFormat stream_format, OBFormat output_format)
+        H26xDecoder::H26xDecoder(frame_handler_cb cb) : frameCallback(std::move(cb)) {}
+        H26xDecoder::~H26xDecoder() {
+
+            if (avpkt != nullptr) {
+                av_packet_free(&avpkt);
+            }
+
+            if (frame != nullptr) {
+                av_frame_free(&frame);
+            }
+
+            if (sw_frame != nullptr) {
+                av_frame_free(&sw_frame);
+            }
+
+            if (pCodecParserCtx != nullptr) {
+                av_free(pCodecParserCtx);
+            }
+
+            if (cctx != nullptr) {
+                avcodec_free_context(&cctx);
+            }
+
+            if (hw_device_ctx != nullptr) {
+                av_buffer_unref(&hw_device_ctx);
+            }
+
+        }
+
+        bool H26xDecoder::DecoderInit(AVHWDeviceType device_type, OBFormat stream_format, OBFormat output_format)
         {
             inputFormat = stream_format;
             outputFormat = output_format;
@@ -38,10 +65,43 @@ namespace tcn {
                 return false;
             }
 
+            if (device_type != AV_HWDEVICE_TYPE_NONE) {
+                for (int i = 0;; i++) {
+                    const AVCodecHWConfig *config = avcodec_get_hw_config(codec, i);
+                    if (!config) {
+                        spdlog::error("Decoder {0} does not support device type {1}.",
+                                      codec->name, av_hwdevice_get_type_name(device_type));
+                        throw std::runtime_error("Error");
+                    }
+                    if (config->methods&AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX &&
+                        config->device_type == device_type) {
+                        decoderOutputFormat = config->pix_fmt;
+                        break;
+                    }
+                }
+            }
+
             cctx = avcodec_alloc_context3(codec);
             if (!cctx) {
                 spdlog::error("Could not allocate video codec context.");
                 return false;
+            }
+
+            if (device_type == AV_HWDEVICE_TYPE_CUDA) {
+                hwOutputFormat = AV_PIX_FMT_CUDA;
+                decoderOutputFormat = AV_PIX_FMT_NV12;
+            } else if (device_type != AV_HWDEVICE_TYPE_NONE) {
+                spdlog::error("Unsupported hardware acceleration requested.");
+                return false;
+            }
+
+            if (device_type != AV_HWDEVICE_TYPE_NONE) {
+                if (av_hwdevice_ctx_create(&hw_device_ctx, device_type,
+                                                  NULL, NULL, 0) < 0) {
+                    spdlog::error("Failed to create specified HW device.");
+                    return false;
+                }
+                cctx->hw_device_ctx = av_buffer_ref(hw_device_ctx);
             }
 
             pCodecParserCtx = av_parser_init(cctx->codec_id); //初始化 AVCodecParserContext
@@ -58,6 +118,11 @@ namespace tcn {
             frame = av_frame_alloc();
             if (!frame) {
                 spdlog::error("Could not allocate video frame.");
+                return false;
+            }
+            sw_frame = av_frame_alloc();
+            if (!sw_frame) {
+                spdlog::error("Could not allocate video sw_frame.");
                 return false;
             }
             return true;
@@ -91,6 +156,21 @@ namespace tcn {
                         spdlog::error("avcodec_receive_frame fail");
                         return false;
                     }
+                    AVFrame *tmp_frame{nullptr};
+
+                    if (frame->format == hwOutputFormat) {
+                        /* retrieve data from GPU to CPU */
+                        int ret{0};
+                        if (av_hwframe_transfer_data(sw_frame, frame, 0) < 0) {
+                            spdlog::error("Error transferring the data to system memory");
+                            av_frame_free(&sw_frame);
+                            return false;
+                        }
+                        tmp_frame = sw_frame;
+                    } else {
+                        tmp_frame = frame;
+                    }
+
                     if (!bIsInit)
                     {
                         width = cctx->width;
@@ -115,7 +195,9 @@ namespace tcn {
 //                                spdlog::error("Unhandled output format: {0}", static_cast<int>(outputFormat));
 //                                return false;
 //                        }
-                        imgCtx = sws_getContext(cctx->width, cctx->height, cctx->pix_fmt,
+
+                        // skip if in/out are identical ?
+                        imgCtx = sws_getContext(cctx->width, cctx->height, decoderOutputFormat,
                                                 cctx->width, cctx->height, frameOutputFormat,
                                                 SWS_BICUBIC, nullptr, nullptr, nullptr);
 
@@ -128,6 +210,7 @@ namespace tcn {
                         converted_frame = av_frame_alloc();
                         converted_frame->width = width;
                         converted_frame->height = height;
+                        converted_frame->format = frameOutputFormat;
                         vsize = av_image_get_buffer_size(frameOutputFormat, cctx->width, cctx->height, 1);
                         buf = (uint8_t *)av_malloc(vsize);
                         av_image_fill_arrays(converted_frame->data, converted_frame->linesize, buf,
@@ -137,7 +220,7 @@ namespace tcn {
 
                     if (bIsInit)
                     {
-                        sws_scale(imgCtx, frame->data, frame->linesize, 0, cctx->height,
+                        sws_scale(imgCtx, tmp_frame->data, tmp_frame->linesize, 0, cctx->height,
                                   converted_frame->data, converted_frame->linesize);
 
                         //float time = cctx->time_base.den / cctx->time_base.num;
