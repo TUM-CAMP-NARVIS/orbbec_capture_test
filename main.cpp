@@ -90,10 +90,10 @@ static void avlog_cb(void *, int level, const char * szFmt, va_list varg) {
 }
 
 int main(int argc, char **argv) try {
-    spdlog::set_level(spdlog::level::level_enum::info);
+    spdlog::set_level(spdlog::level::level_enum::trace);
     ob::Context::setLoggerSeverity(OB_LOG_SEVERITY_INFO);
     av_log_set_callback(avlog_cb);
-    av_log_set_level(AV_LOG_INFO);
+    av_log_set_level(AV_LOG_TRACE);
 
 
     spdlog::info("Available device types:");
@@ -255,7 +255,7 @@ int main(int argc, char **argv) try {
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
     should_stop = true;
     decoder_task.wait();
-//    receiver_task.wait();
+    decoder->DecoderTeardown();
 
     report_stats("frame_durations", frame_durations);
     report_stats("decode_durations", encode_durations);

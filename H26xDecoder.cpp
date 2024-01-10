@@ -9,6 +9,32 @@ namespace tcn {
 
         H26xDecoder::H26xDecoder(frame_handler_cb cb) : frameCallback(std::move(cb)) {}
         H26xDecoder::~H26xDecoder() {
+            DecoderTeardown();
+        }
+
+        void H26xDecoder::DecoderTeardown() {
+
+            // drain the codec parser
+            if (cctx) {
+                if (avcodec_send_packet(cctx, NULL))
+                {
+                    spdlog::error("avcodec_send_packet fail");
+                }
+                while (true) {
+                    if (avcodec_receive_frame(cctx, frame) == AVERROR_EOF) {
+                        break;
+                    }
+                }
+            }
+
+            // segfaults -- why?
+//            if (pCodecParserCtx != nullptr) {
+//                av_parser_close(pCodecParserCtx);
+//            }
+
+            if (cctx != nullptr) {
+                avcodec_free_context(&cctx);
+            }
 
             if (avpkt != nullptr) {
                 av_packet_free(&avpkt);
@@ -20,14 +46,6 @@ namespace tcn {
 
             if (sw_frame != nullptr) {
                 av_frame_free(&sw_frame);
-            }
-
-            if (pCodecParserCtx != nullptr) {
-                av_free(pCodecParserCtx);
-            }
-
-            if (cctx != nullptr) {
-                avcodec_free_context(&cctx);
             }
 
             if (hw_device_ctx != nullptr) {
@@ -44,7 +62,7 @@ namespace tcn {
             avpkt = av_packet_alloc();
             if (!avpkt) {
                 spdlog::error("Could not allocate packet");
-                exit(1);
+                return false;
             }
 
             switch (stream_format) {
@@ -197,38 +215,46 @@ namespace tcn {
 //                        }
 
                         // skip if in/out are identical ?
-                        imgCtx = sws_getContext(cctx->width, cctx->height, decoderOutputFormat,
-                                                cctx->width, cctx->height, frameOutputFormat,
-                                                SWS_BICUBIC, nullptr, nullptr, nullptr);
+                        if (decoderOutputFormat != frameOutputFormat) {
+                            imgCtx = sws_getContext(cctx->width, cctx->height, decoderOutputFormat,
+                                                    cctx->width, cctx->height, frameOutputFormat,
+                                                    SWS_BICUBIC, nullptr, nullptr, nullptr);
 
-                        if (!imgCtx)
-                        {
-                            spdlog::error("initialization of swscale context failed.");
-                            return false;
+                            if (!imgCtx)
+                            {
+                                spdlog::error("initialization of swscale context failed.");
+                                return false;
+                            }
+
+                            converted_frame = av_frame_alloc();
+                            converted_frame->width = width;
+                            converted_frame->height = height;
+                            converted_frame->format = frameOutputFormat;
+                            vsize = av_image_get_buffer_size(frameOutputFormat, cctx->width, cctx->height, 1);
+                            buf = (uint8_t *)av_malloc(vsize);
+                            av_image_fill_arrays(converted_frame->data, converted_frame->linesize, buf,
+                                                 frameOutputFormat, cctx->width, cctx->height, 1);
                         }
-
-                        converted_frame = av_frame_alloc();
-                        converted_frame->width = width;
-                        converted_frame->height = height;
-                        converted_frame->format = frameOutputFormat;
-                        vsize = av_image_get_buffer_size(frameOutputFormat, cctx->width, cctx->height, 1);
-                        buf = (uint8_t *)av_malloc(vsize);
-                        av_image_fill_arrays(converted_frame->data, converted_frame->linesize, buf,
-                                             frameOutputFormat, cctx->width, cctx->height, 1);
                         bIsInit = true;
                     }
 
                     if (bIsInit)
                     {
-                        sws_scale(imgCtx, tmp_frame->data, tmp_frame->linesize, 0, cctx->height,
-                                  converted_frame->data, converted_frame->linesize);
-
-                        //float time = cctx->time_base.den / cctx->time_base.num;
-
-                        cv::Mat y_mat = cv::Mat(converted_frame->height, converted_frame->width, CV_8UC1, converted_frame->data[0], converted_frame->linesize[0]);
-                        cv::Mat uv_mat = cv::Mat(converted_frame->height / 2, converted_frame->width / 2, CV_8UC2, converted_frame->data[1], converted_frame->linesize[1]);
                         cv::Mat bgr_mat;
-                        cv::cvtColorTwoPlane(y_mat, uv_mat, bgr_mat, cv::COLOR_YUV2BGR_NV12);
+                        if (decoderOutputFormat != AV_PIX_FMT_NV12) {
+                            sws_scale(imgCtx, tmp_frame->data, tmp_frame->linesize, 0, cctx->height,
+                                      converted_frame->data, converted_frame->linesize);
+
+                            //float time = cctx->time_base.den / cctx->time_base.num;
+
+                            cv::Mat y_mat = cv::Mat(converted_frame->height, converted_frame->width, CV_8UC1, converted_frame->data[0], converted_frame->linesize[0]);
+                            cv::Mat uv_mat = cv::Mat(converted_frame->height / 2, converted_frame->width / 2, CV_8UC2, converted_frame->data[1], converted_frame->linesize[1]);
+                            cv::cvtColorTwoPlane(y_mat, uv_mat, bgr_mat, cv::COLOR_YUV2BGR_NV12);
+                        } else {
+                            cv::Mat y_mat = cv::Mat(tmp_frame->height, tmp_frame->width, CV_8UC1, tmp_frame->data[0], tmp_frame->linesize[0]);
+                            cv::Mat uv_mat = cv::Mat(tmp_frame->height / 2, tmp_frame->width / 2, CV_8UC2, tmp_frame->data[1], tmp_frame->linesize[1]);
+                            cv::cvtColorTwoPlane(y_mat, uv_mat, bgr_mat, cv::COLOR_YUV2BGR_NV12);
+                        }
 
                         frameCallback(bgr_mat);
                         decodedImage = true;

@@ -52,6 +52,8 @@ namespace tcn::vpf {
 
         bool DecodeOnePacket(int cur_size, uint8_t *cur_ptr);
 
+        void DecoderTeardown();
+
         OBFormat inputFormat{OB_FORMAT_UNKNOWN};
         OBFormat outputFormat{OB_FORMAT_BGR};
         AVPixelFormat hwOutputFormat{AV_PIX_FMT_NONE};
