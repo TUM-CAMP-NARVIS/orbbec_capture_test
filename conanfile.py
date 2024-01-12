@@ -17,6 +17,7 @@ class TestOrbbecCaptureRecipe(ConanFile):
     def configure(self):
         if self.settings.os == "Macos":
             self.options["opencv"].with_ipp = False
+            self.options["ffmpeg"].with_videotoolbox = True
 
     def requirements(self):
         self.requires("orbbec-sdk/1.8@vendor/stable", transitive_libs=True)

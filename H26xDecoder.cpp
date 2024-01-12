@@ -17,6 +17,9 @@ namespace tcn {
                 if (ctx->hw_device_ctx != nullptr && *p == AV_PIX_FMT_CUDA) {
                     spdlog::info("Decoder: selected output format: {0}", av_get_pix_fmt_name(*p));
                     return *p;
+                } else if (ctx->hw_device_ctx != nullptr && *p == AV_PIX_FMT_VIDEOTOOLBOX) {
+                    spdlog::info("Decoder: selected output format: {0}", av_get_pix_fmt_name(*p));
+                    return *p;
                 } else if ( *p == AV_PIX_FMT_NV12 || *p == AV_PIX_FMT_YUV420P) {
                     spdlog::info("Decoder: selected output format: {0}", av_get_pix_fmt_name(*p));
                     return *p;
@@ -123,7 +126,10 @@ namespace tcn {
             if (device_type == AV_HWDEVICE_TYPE_CUDA) {
                 hwOutputFormat = AV_PIX_FMT_CUDA;
                 spdlog::info("Decoder: selected nvidia cuda decoder.");
-            } else if (device_type != AV_HWDEVICE_TYPE_NONE) {
+            } else if (device_type == AV_HWDEVICE_TYPE_VIDEOTOOLBOX) {
+                hwOutputFormat = AV_PIX_FMT_VIDEOTOOLBOX;
+                spdlog::info("Decoder: selected macos videotoolbox decoder.");
+            } else  if (device_type != AV_HWDEVICE_TYPE_NONE) {
                 spdlog::error("Unsupported hardware acceleration requested.");
                 return false;
             } else {
@@ -200,7 +206,8 @@ namespace tcn {
                     }
                     AVFrame *tmp_frame{nullptr};
 
-                    if (cctx->hw_device_ctx != nullptr && cctx->pix_fmt == AV_PIX_FMT_CUDA) { // potentially other hw-accelerated formats here..
+                    if (cctx->hw_device_ctx != nullptr && (cctx->pix_fmt == AV_PIX_FMT_CUDA ||
+                            cctx->pix_fmt == AV_PIX_FMT_VIDEOTOOLBOX)) { // potentially other hw-accelerated formats here..
                         /* retrieve data from GPU to CPU */
                         int ret{0};
                         if (av_hwframe_transfer_data(sw_frame, frame, 0) < 0) {

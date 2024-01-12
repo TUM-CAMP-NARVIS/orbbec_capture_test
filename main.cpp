@@ -102,6 +102,17 @@ int main(int argc, char **argv) try {
         spdlog::info("HW Device: {0}", av_hwdevice_get_type_name(type));
     }
 
+    AVHWDeviceType device_type = AV_HWDEVICE_TYPE_NONE;
+#if defined(__linux__) // Or #if __linux__
+    device_type = AV_HWDEVICE_TYPE_CUDA;
+#elif __APPLE__
+    device_type = AV_HWDEVICE_TYPE_VIDEOTOOLBOX;
+#elif _WIN32
+    device_type = AV_HWDEVICE_TYPE_CUDA;
+#else
+  spdlog::warning("Running on supported operating system.");
+#endif
+
 
     // Create a Context
     ob::Context ctx;
@@ -143,7 +154,7 @@ int main(int argc, char **argv) try {
                     if (!decoder) {
 
                         decoder = std::make_unique<tcn::vpf::H26xDecoder>(display_cb);
-                        if (!decoder->DecoderInit(AV_HWDEVICE_TYPE_CUDA, cf->format(), OB_FORMAT_BGRA)) {
+                        if (!decoder->DecoderInit(device_type, cf->format(), OB_FORMAT_BGRA)) {
                             spdlog::error("error initializing decoder");
                         }
                         spdlog::info("created decoder: {0}x{1}", cf->width(), cf->height());
