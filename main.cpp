@@ -90,16 +90,17 @@ static void avlog_cb(void *, int level, const char * szFmt, va_list varg) {
 }
 
 int main(int argc, char **argv) try {
-    spdlog::set_level(spdlog::level::level_enum::trace);
+    spdlog::set_level(spdlog::level::level_enum::info);
     ob::Context::setLoggerSeverity(OB_LOG_SEVERITY_INFO);
     av_log_set_callback(avlog_cb);
-    av_log_set_level(AV_LOG_TRACE);
+    av_log_set_level(AV_LOG_WARNING);
 
 
     spdlog::info("Available device types:");
     AVHWDeviceType type{AV_HWDEVICE_TYPE_NONE};
-    while ((type = av_hwdevice_iterate_types(type)) != AV_HWDEVICE_TYPE_NONE)
+    while ((type = av_hwdevice_iterate_types(type)) != AV_HWDEVICE_TYPE_NONE) {
         spdlog::info("HW Device: {0}", av_hwdevice_get_type_name(type));
+    }
 
 
     // Create a Context

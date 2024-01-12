@@ -7,6 +7,25 @@
 namespace tcn {
     namespace vpf {
 
+
+        static enum AVPixelFormat get_hw_format(AVCodecContext *ctx,
+                                                const enum AVPixelFormat *pix_fmts) {
+            const enum AVPixelFormat *p;
+
+            for (p = pix_fmts; *p != -1; p++) {
+                spdlog::trace("Decoder - available pix_fmt: {0}", av_get_pix_fmt_name(*p));
+                if (ctx->hw_device_ctx != nullptr && *p == AV_PIX_FMT_CUDA) {
+                    spdlog::info("Decoder: selected output format: {0}", av_get_pix_fmt_name(*p));
+                    return *p;
+                } else if ( *p == AV_PIX_FMT_NV12 || *p == AV_PIX_FMT_YUV420P) {
+                    spdlog::info("Decoder: selected output format: {0}", av_get_pix_fmt_name(*p));
+                    return *p;
+                }
+            }
+            spdlog::error("Failed to select NV12 output format.");
+            return AV_PIX_FMT_NONE;
+        }
+
         H26xDecoder::H26xDecoder(frame_handler_cb cb) : frameCallback(std::move(cb)) {}
         H26xDecoder::~H26xDecoder() {
             DecoderTeardown();
@@ -26,11 +45,6 @@ namespace tcn {
                     }
                 }
             }
-
-            // segfaults -- why?
-//            if (pCodecParserCtx != nullptr) {
-//                av_parser_close(pCodecParserCtx);
-//            }
 
             if (cctx != nullptr) {
                 avcodec_free_context(&cctx);
@@ -105,13 +119,17 @@ namespace tcn {
                 return false;
             }
 
+            // how to determine the potential output formats of the selected decoder?
             if (device_type == AV_HWDEVICE_TYPE_CUDA) {
                 hwOutputFormat = AV_PIX_FMT_CUDA;
-                decoderOutputFormat = AV_PIX_FMT_NV12;
+                spdlog::info("Decoder: selected nvidia cuda decoder.");
             } else if (device_type != AV_HWDEVICE_TYPE_NONE) {
                 spdlog::error("Unsupported hardware acceleration requested.");
                 return false;
+            } else {
+                spdlog::info("Decoder: selected software decoder.");
             }
+            cctx->get_format = get_hw_format;
 
             if (device_type != AV_HWDEVICE_TYPE_NONE) {
                 if (av_hwdevice_ctx_create(&hw_device_ctx, device_type,
@@ -133,6 +151,10 @@ namespace tcn {
                 return false;
             }
 
+            if (cctx->hwaccel != nullptr) {
+                assert(hwOutputFormat == cctx->hwaccel->pix_fmt);
+            }
+
             frame = av_frame_alloc();
             if (!frame) {
                 spdlog::error("Could not allocate video frame.");
@@ -143,6 +165,8 @@ namespace tcn {
                 spdlog::error("Could not allocate video sw_frame.");
                 return false;
             }
+
+
             return true;
         }
 
@@ -176,7 +200,7 @@ namespace tcn {
                     }
                     AVFrame *tmp_frame{nullptr};
 
-                    if (frame->format == hwOutputFormat) {
+                    if (cctx->hw_device_ctx != nullptr && cctx->pix_fmt == AV_PIX_FMT_CUDA) { // potentially other hw-accelerated formats here..
                         /* retrieve data from GPU to CPU */
                         int ret{0};
                         if (av_hwframe_transfer_data(sw_frame, frame, 0) < 0) {
@@ -193,7 +217,7 @@ namespace tcn {
                     {
                         width = cctx->width;
                         height = cctx->height;
-
+                        decoderOutputFormat = static_cast<AVPixelFormat>(tmp_frame->format);
                         frameOutputFormat = AV_PIX_FMT_NV12;
                         outputFormat = OB_FORMAT_NV12;
 //                        switch(outputFormat) {
