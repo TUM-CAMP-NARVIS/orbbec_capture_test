@@ -119,10 +119,10 @@ int main(int argc, char **argv) try {
 
     // Enter the device ip address (currently only FemtoMega devices support network connection, and its default ip address is 192.168.1.10)
     std::string ip;
-    std::cout << "Input your device ip(default: 10.0.60.40):";
+    std::cout << "Input your device ip(default: 10.0.130.42):";
     std::getline(std::cin, ip);
     if(ip.empty()) {
-        ip = "10.0.60.40";
+        ip = "10.0.130.42";
     }
     std::string use_depth_in;
     std::cout << "should depth stream be activated(default: y):";
